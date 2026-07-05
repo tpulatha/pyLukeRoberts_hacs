@@ -42,5 +42,6 @@ class LukeRobertsCoordinator(DataUpdateCoordinator[None]):
     async def _async_update_data(self) -> None:
         try:
             await self.lamp.update()
-        except (BleakError, TimeoutError, OSError) as err:
+        # RuntimeError: lamp rejected the scene query (e.g. BLE security code set)
+        except (BleakError, TimeoutError, OSError, RuntimeError) as err:
             raise UpdateFailed(f"Unable to reach lamp {self.lamp.address}: {err}") from err
