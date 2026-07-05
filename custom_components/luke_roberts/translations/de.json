@@ -1,0 +1,21 @@
+{
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "user": {
+        "description": "Wähle die Luke Roberts Lampe aus, die hinzugefügt werden soll.",
+        "data": {
+          "address": "Lampe"
+        }
+      },
+      "bluetooth_confirm": {
+        "description": "Möchtest du {name} einrichten?"
+      }
+    },
+    "abort": {
+      "already_configured": "Diese Lampe ist bereits eingerichtet.",
+      "already_in_progress": "Die Einrichtung dieser Lampe läuft bereits.",
+      "no_devices_found": "Es wurden keine Luke Roberts Lampen gefunden. Stelle sicher, dass die Lampe mit Strom versorgt und in Bluetooth-Reichweite ist."
+    }
+  }
+}
