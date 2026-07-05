@@ -5,12 +5,18 @@ A Home Assistant custom integration for [Luke Roberts](https://www.luke-roberts.
 ## Features
 
 - **Automatic discovery** — lamps in Bluetooth range are discovered and offered for setup automatically. Works with local Bluetooth adapters and [ESPHome Bluetooth proxies](https://esphome.io/components/bluetooth_proxy.html).
-- **One light entity per lamp** with:
+- **A main light entity per lamp** with:
   - On/off
-  - Brightness
+  - Brightness (dims the whole scene)
   - Color temperature (2700–4000 K, drives the downlight)
   - Color (hue/saturation, drives the uplight)
   - The lamp's built-in scenes as light *effects*
+- **Separate "Uplight" and "Downlight" entities** on the same device, each with
+  its own independent brightness — the uplight with HS color, the downlight
+  with color temperature. These use the lamp's *Immediate Light* command, so
+  changes are transient: the lamp reverts them when the scene changes or power
+  cycles, and their state in Home Assistant is assumed (the lamp cannot report
+  it back).
 
 ## Installation
 

@@ -14,6 +14,6 @@
   "integration_type": "device",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/tpulatha/pyLukeRoberts_hacs/issues",
-  "requirements": ["pylukeroberts==0.6.0"],
-  "version": "0.0.1"
+  "requirements": ["pylukeroberts==0.7.0"],
+  "version": "0.0.2"
 }
