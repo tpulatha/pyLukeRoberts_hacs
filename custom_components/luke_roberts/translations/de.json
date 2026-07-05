@@ -17,5 +17,15 @@
       "already_in_progress": "Die Einrichtung dieser Lampe läuft bereits.",
       "no_devices_found": "Es wurden keine Luke Roberts Lampen gefunden. Stelle sicher, dass die Lampe mit Strom versorgt und in Bluetooth-Reichweite ist."
     }
+  },
+  "entity": {
+    "light": {
+      "uplight": {
+        "name": "Indirektes Licht"
+      },
+      "downlight": {
+        "name": "Direktes Licht"
+      }
+    }
   }
 }

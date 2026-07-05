@@ -17,5 +17,15 @@
       "already_in_progress": "Configuration is already in progress for this lamp.",
       "no_devices_found": "No Luke Roberts lamps were found. Make sure the lamp is powered and in Bluetooth range."
     }
+  },
+  "entity": {
+    "light": {
+      "uplight": {
+        "name": "Uplight"
+      },
+      "downlight": {
+        "name": "Downlight"
+      }
+    }
   }
 }

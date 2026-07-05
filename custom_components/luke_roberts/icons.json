@@ -1,0 +1,12 @@
+{
+  "entity": {
+    "light": {
+      "uplight": {
+        "default": "mdi:wall-sconce-flat"
+      },
+      "downlight": {
+        "default": "mdi:track-light"
+      }
+    }
+  }
+}

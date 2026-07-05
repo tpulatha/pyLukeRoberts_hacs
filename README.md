@@ -1,5 +1,9 @@
 # Luke Roberts for Home Assistant
 
+[![GitHub release](https://img.shields.io/github/v/release/tpulatha/pyLukeRoberts_hacs)](https://github.com/tpulatha/pyLukeRoberts_hacs/releases)
+[![Validate](https://github.com/tpulatha/pyLukeRoberts_hacs/actions/workflows/validate.yml/badge.svg)](https://github.com/tpulatha/pyLukeRoberts_hacs/actions/workflows/validate.yml)
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+
 A Home Assistant custom integration for [Luke Roberts](https://www.luke-roberts.com/) smart lamps (Luvo / Model F), controlled locally over Bluetooth Low Energy via [pyLukeRoberts](https://github.com/tpulatha/pyLukeRoberts).
 
 ## Features
@@ -33,6 +37,50 @@ Copy `custom_components/luke_roberts` into your Home Assistant `config/custom_co
 ## Setup
 
 If a lamp is in range it is discovered automatically — accept the discovery notification in **Settings → Devices & Services**. Otherwise add the integration manually via **Add Integration → Luke Roberts** and pick the lamp from the list.
+
+## Example automation
+
+```yaml
+# Warm, dim reading light in the evening
+automation:
+  - alias: "Evening reading light"
+    triggers:
+      - trigger: sun
+        event: sunset
+    actions:
+      - action: light.turn_on
+        target:
+          entity_id: light.luvo
+        data:
+          effect: "Reading"        # one of the lamp's scenes
+      - action: light.turn_on
+        target:
+          entity_id: light.luvo_downlight
+        data:
+          color_temp_kelvin: 2700
+          brightness_pct: 40
+```
+
+## Troubleshooting
+
+- **Lamp is not discovered / commands fail:** the lamp accepts one BLE
+  connection at a time. Close the Luke Roberts phone app (or move it to the
+  background) — it holds connections to all lamps in range while open.
+- **Commands rejected:** if a Bluetooth *security code* is set in the Luke
+  Roberts app, the lamp rejects all API commands. Remove the code to use this
+  integration.
+- **Uplight/Downlight show wrong state:** their changes are transient by
+  design; the lamp reverts them on scene change or power-cycle without any way
+  to report that back. The main light entity always reflects the polled scene
+  state.
+
+### Debug logging
+
+Enable via **Settings → Devices & Services → Luke Roberts → ⋮ → Enable debug
+logging**. Reproduce the issue, then disable debug logging — Home Assistant
+downloads a log filtered to this integration, including the BLE commands sent
+by the `pylukeroberts` library. Attach that file to a
+[GitHub issue](https://github.com/tpulatha/pyLukeRoberts_hacs/issues).
 
 ## Notes
 

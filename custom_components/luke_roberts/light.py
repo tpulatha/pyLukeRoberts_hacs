@@ -25,6 +25,9 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .coordinator import LukeRobertsConfigEntry, LukeRobertsCoordinator
 
+# One BLE lamp, one conversation at a time.
+PARALLEL_UPDATES = 1
+
 DEFAULT_UPLIGHT_HS = (30.0, 100.0)
 DEFAULT_DOWNLIGHT_KELVIN = 3000
 
@@ -156,7 +159,7 @@ class LukeRobertsUplight(LukeRobertsBaseLight):
     nothing is readable back, so all state is assumed.
     """
 
-    _attr_name = "Uplight"
+    _attr_translation_key = "uplight"
     _attr_supported_color_modes = {ColorMode.HS}
     _attr_color_mode = ColorMode.HS
     _attr_assumed_state = True
@@ -196,7 +199,7 @@ class LukeRobertsDownlight(LukeRobertsBaseLight):
     nothing is readable back, so all state is assumed.
     """
 
-    _attr_name = "Downlight"
+    _attr_translation_key = "downlight"
     _attr_supported_color_modes = {ColorMode.COLOR_TEMP}
     _attr_color_mode = ColorMode.COLOR_TEMP
     _attr_min_color_temp_kelvin = MIN_KELVIN
