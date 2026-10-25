@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
-
-import voluptuous as vol
 
 from homeassistant.components.bluetooth import (
     BluetoothServiceInfoBleak,
@@ -12,12 +11,31 @@ from homeassistant.components.bluetooth import (
 )
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_ADDRESS
+from pylukeroberts import LukeRobertsError, LukeRobertsForbiddenError, LuvoLamp
+import voluptuous as vol
 
 from .const import DOMAIN, SERVICE_UUID
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _title(discovery_info: BluetoothServiceInfoBleak) -> str:
     return discovery_info.name or discovery_info.address
+
+
+async def _async_validate(discovery_info: BluetoothServiceInfoBleak) -> str | None:
+    """Connect once and ping the lamp; return an error key or None."""
+    lamp = LuvoLamp(discovery_info.device, discovery_info.advertisement)
+    try:
+        await lamp.ping()
+    except LukeRobertsForbiddenError:
+        return "security_code"
+    except LukeRobertsError:
+        _LOGGER.debug("Cannot connect to %s", discovery_info.address, exc_info=True)
+        return "cannot_connect"
+    finally:
+        await lamp.stop()
+    return None
 
 
 class LukeRobertsConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -44,29 +62,37 @@ class LukeRobertsConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Confirm adding a discovered lamp."""
         assert self._discovery_info is not None
+        errors: dict[str, str] = {}
         if user_input is not None:
-            return self.async_create_entry(
-                title=_title(self._discovery_info),
-                data={CONF_ADDRESS: self._discovery_info.address},
-            )
+            if (error := await _async_validate(self._discovery_info)) is None:
+                return self.async_create_entry(
+                    title=_title(self._discovery_info),
+                    data={CONF_ADDRESS: self._discovery_info.address},
+                )
+            errors["base"] = error
         self._set_confirm_only()
         return self.async_show_form(
             step_id="bluetooth_confirm",
             description_placeholders={"name": _title(self._discovery_info)},
+            errors=errors,
         )
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle a flow started by the user: pick from discovered lamps."""
+        errors: dict[str, str] = {}
         if user_input is not None:
             address = user_input[CONF_ADDRESS]
             await self.async_set_unique_id(address, raise_on_progress=False)
             self._abort_if_unique_id_configured()
-            return self.async_create_entry(
-                title=_title(self._discovered_devices[address]),
-                data={CONF_ADDRESS: address},
-            )
+            discovery_info = self._discovered_devices[address]
+            if (error := await _async_validate(discovery_info)) is None:
+                return self.async_create_entry(
+                    title=_title(discovery_info),
+                    data={CONF_ADDRESS: address},
+                )
+            errors["base"] = error
 
         current_addresses = self._async_current_ids(include_ignore=False)
         for discovery_info in async_discovered_service_info(
@@ -94,4 +120,5 @@ class LukeRobertsConfigFlow(ConfigFlow, domain=DOMAIN):
                     )
                 }
             ),
+            errors=errors,
         )

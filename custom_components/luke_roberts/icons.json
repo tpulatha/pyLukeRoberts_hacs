@@ -7,6 +7,11 @@
       "downlight": {
         "default": "mdi:track-light"
       }
+    },
+    "select": {
+      "scene": {
+        "default": "mdi:palette"
+      }
     }
   }
 }

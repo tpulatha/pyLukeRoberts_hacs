@@ -12,6 +12,10 @@
         "description": "Möchtest du {name} einrichten?"
       }
     },
+    "error": {
+      "cannot_connect": "Verbindung zur Lampe fehlgeschlagen. Schließe die Luke Roberts App und stelle sicher, dass die Lampe in Bluetooth-Reichweite ist.",
+      "security_code": "Für die Lampe ist ein Bluetooth-Sicherheitscode gesetzt. Entferne ihn in der Luke Roberts App und versuche es erneut."
+    },
     "abort": {
       "already_configured": "Diese Lampe ist bereits eingerichtet.",
       "already_in_progress": "Die Einrichtung dieser Lampe läuft bereits.",
@@ -26,6 +30,28 @@
       "downlight": {
         "name": "Direktes Licht"
       }
+    },
+    "select": {
+      "scene": {
+        "name": "Szene"
+      }
+    }
+  },
+  "exceptions": {
+    "device_not_found": {
+      "message": "Die Luke Roberts Lampe {address} wurde von keinem Bluetooth-Adapter oder Proxy gefunden."
+    },
+    "security_code": {
+      "message": "Die Lampe hat den Befehl abgelehnt, weil ein Bluetooth-Sicherheitscode gesetzt ist. Entferne ihn in der Luke Roberts App."
+    },
+    "update_failed": {
+      "message": "Der Zustand der Lampe konnte nicht gelesen werden: {error}"
+    },
+    "command_failed": {
+      "message": "Der Befehl an die Lampe ist fehlgeschlagen: {error}"
+    },
+    "unknown_effect": {
+      "message": "Die Lampe hat keine Szene mit dem Namen \"{effect}\"."
     }
   }
 }

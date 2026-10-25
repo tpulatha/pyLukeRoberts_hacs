@@ -20,6 +20,7 @@ async def async_get_config_entry_diagnostics(
     """Return diagnostics for a config entry."""
     coordinator = entry.runtime_data
     lamp = coordinator.lamp
+    state = coordinator.data
     return {
         "entry": async_redact_data(
             {
@@ -30,13 +31,11 @@ async def async_get_config_entry_diagnostics(
             TO_REDACT,
         ),
         "lamp": {
-            "is_on": lamp.is_on,
+            "is_on": state.is_on,
             "is_connected": lamp.is_connected,
-            "current_scene_id": lamp.current_scene_id,
-            "current_scene_name": lamp.current_scene_name,
-            "scenes": [
-                {"id": scene.id, "name": scene.name} for scene in lamp.scenes
-            ],
+            "current_scene_id": state.current_scene_id,
+            "current_scene_name": state.current_scene_name,
+            "scenes": [{"id": scene.id, "name": scene.name} for scene in state.scenes],
         },
         "bluetooth": {
             "address_present": bluetooth.async_address_present(
@@ -45,5 +44,8 @@ async def async_get_config_entry_diagnostics(
         },
         "coordinator": {
             "last_update_success": coordinator.last_update_success,
+            "last_exception": repr(coordinator.last_exception).replace(
+                lamp.address, "**REDACTED**"
+            ),
         },
     }

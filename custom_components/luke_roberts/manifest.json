@@ -7,14 +7,22 @@
       "connectable": true
     }
   ],
-  "codeowners": ["@tpulatha"],
+  "codeowners": [
+    "@tpulatha"
+  ],
   "config_flow": true,
-  "dependencies": ["bluetooth_adapters"],
+  "dependencies": [
+    "bluetooth_adapters"
+  ],
   "documentation": "https://github.com/tpulatha/pyLukeRoberts_hacs",
   "integration_type": "device",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/tpulatha/pyLukeRoberts_hacs/issues",
-  "loggers": ["pylukeroberts"],
-  "requirements": ["pylukeroberts==0.7.0"],
-  "version": "0.0.3"
+  "loggers": [
+    "pylukeroberts"
+  ],
+  "requirements": [
+    "pylukeroberts==0.8.0"
+  ],
+  "version": "0.1.0"
 }

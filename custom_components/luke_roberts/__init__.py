@@ -2,37 +2,39 @@
 
 from __future__ import annotations
 
-import logging
-
-from pylukeroberts import LuvoLamp
-
 from homeassistant.components import bluetooth
 from homeassistant.components.bluetooth.match import BluetoothCallbackMatcher
 from homeassistant.const import CONF_ADDRESS, Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
+from pylukeroberts import LuvoLamp
 
+from .const import DOMAIN
 from .coordinator import LukeRobertsConfigEntry, LukeRobertsCoordinator
 
-_LOGGER = logging.getLogger(__name__)
-
-PLATFORMS: list[Platform] = [Platform.LIGHT]
+PLATFORMS: list[Platform] = [Platform.LIGHT, Platform.SELECT]
 
 
-async def async_setup_entry(
-    hass: HomeAssistant, entry: LukeRobertsConfigEntry
-) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: LukeRobertsConfigEntry) -> bool:
     """Set up a Luke Roberts lamp from a config entry."""
-    address: str = entry.data[CONF_ADDRESS]
+    address: str = entry.data[CONF_ADDRESS].upper()
     ble_device = bluetooth.async_ble_device_from_address(
-        hass, address.upper(), connectable=True
+        hass, address, connectable=True
     )
     if ble_device is None:
         raise ConfigEntryNotReady(
-            f"Luke Roberts lamp with address {address} not found"
+            translation_domain=DOMAIN,
+            translation_key="device_not_found",
+            translation_placeholders={"address": address},
         )
 
-    lamp = LuvoLamp(ble_device)
+    lamp = LuvoLamp(
+        ble_device,
+        # Pick the best adapter or proxy on every reconnect.
+        ble_device_callback=lambda: bluetooth.async_ble_device_from_address(
+            hass, address, connectable=True
+        ),
+    )
     coordinator = LukeRobertsCoordinator(hass, entry, lamp)
 
     @callback
@@ -52,6 +54,7 @@ async def async_setup_entry(
             bluetooth.BluetoothScanningMode.ACTIVE,
         )
     )
+    entry.async_on_unload(lamp.stop)
 
     await coordinator.async_config_entry_first_refresh()
 
@@ -64,7 +67,4 @@ async def async_unload_entry(
     hass: HomeAssistant, entry: LukeRobertsConfigEntry
 ) -> bool:
     """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok:
-        await entry.runtime_data.lamp.stop()
-    return unload_ok
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

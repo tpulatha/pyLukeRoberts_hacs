@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
-from pylukeroberts.const import MAX_KELVIN, MIN_KELVIN, SCENE_OFF
-
-from homeassistant.components import bluetooth
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
     ATTR_COLOR_TEMP_KELVIN,
@@ -16,14 +14,16 @@ from homeassistant.components.light import (
     LightEntity,
     LightEntityFeature,
 )
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.util.color import brightness_to_value
+from pylukeroberts import Downlight, Uplight
+from pylukeroberts.const import MAX_KELVIN, MIN_KELVIN, SCENE_OFF
 
 from .const import DOMAIN
 from .coordinator import LukeRobertsConfigEntry, LukeRobertsCoordinator
+from .entity import LukeRobertsEntity
 
 # One BLE lamp, one conversation at a time.
 PARALLEL_UPDATES = 1
@@ -35,7 +35,7 @@ DEFAULT_DOWNLIGHT_KELVIN = 3000
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: LukeRobertsConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the Luke Roberts lights from a config entry."""
     coordinator = entry.runtime_data
@@ -48,37 +48,27 @@ async def async_setup_entry(
     )
 
 
-class LukeRobertsBaseLight(CoordinatorEntity[LukeRobertsCoordinator], LightEntity):
-    """Common device info and availability for all lamp entities."""
-
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator: LukeRobertsCoordinator) -> None:
-        super().__init__(coordinator)
-        lamp = coordinator.lamp
-        self._mac = dr.format_mac(lamp.address)
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, self._mac)},
-            connections={(dr.CONNECTION_BLUETOOTH, lamp.address)},
-            name=lamp.name,
-            manufacturer="Luke Roberts",
-            model="Luvo",
-        )
-
-    @property
-    def available(self) -> bool:
-        return super().available and bluetooth.async_address_present(
-            self.hass, self.coordinator.lamp.address, connectable=True
-        )
+def brightness_to_percent(brightness: int) -> int:
+    """HA brightness 1..255 to 1..100 %, never rounding a lit lamp to 0 %."""
+    return math.ceil(brightness_to_value((1, 100), brightness))
 
 
-class LukeRobertsLight(LukeRobertsBaseLight):
+def saturation_to_byte(saturation: float) -> int:
+    """HA saturation 0..100 to the lamp's 0..255."""
+    return round(saturation * 255 / 100)
+
+
+def clamp_kelvin(kelvin: int) -> int:
+    return min(max(int(kelvin), MIN_KELVIN), MAX_KELVIN)
+
+
+class LukeRobertsLight(LukeRobertsEntity, LightEntity):
     """The lamp as a whole.
 
     Brightness dims the entire scene, color temperature drives the downlight,
     HS color drives the uplight. The lamp does not report brightness or color
-    back, so those attributes are optimistic; on/off and the active scene are
-    read from the lamp.
+    back, so those attributes are optimistic and cleared on scene changes;
+    on/off and the active scene are read from the lamp.
     """
 
     _attr_name = None
@@ -88,8 +78,7 @@ class LukeRobertsLight(LukeRobertsBaseLight):
     _attr_max_color_temp_kelvin = MAX_KELVIN
 
     def __init__(self, coordinator: LukeRobertsCoordinator) -> None:
-        super().__init__(coordinator)
-        self._attr_unique_id = self._mac
+        super().__init__(coordinator, None)
         self._attr_color_mode = ColorMode.COLOR_TEMP
         self._attr_brightness = None
         self._attr_color_temp_kelvin = None
@@ -97,129 +86,175 @@ class LukeRobertsLight(LukeRobertsBaseLight):
 
     @property
     def is_on(self) -> bool:
-        return self.coordinator.lamp.is_on
+        return self.coordinator.data.is_on
 
     @property
     def effect(self) -> str | None:
-        return self.coordinator.lamp.current_scene_name
+        return self.coordinator.data.current_scene_name
 
     @property
     def effect_list(self) -> list[str]:
         return [
             scene.name
-            for scene in self.coordinator.lamp.scenes
+            for scene in self.coordinator.data.scenes
             if scene.id != SCENE_OFF
         ]
+
+    @callback
+    def _handle_scene_change(self) -> None:
+        self._attr_brightness = None
+        self._attr_color_temp_kelvin = None
+        self._attr_hs_color = None
+        self._attr_color_mode = ColorMode.COLOR_TEMP
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the lamp on, optionally selecting a scene or adjusting it."""
         lamp = self.coordinator.lamp
-
+        scene_id: int | None = None
         if (effect := kwargs.get(ATTR_EFFECT)) is not None:
-            for scene in lamp.scenes:
-                if scene.name == effect and scene.id != SCENE_OFF:
-                    await lamp.select_scene(scene.id)
-                    break
-        elif not lamp.is_on:
-            await lamp.switch_on()
+            scene_id = next(
+                (
+                    scene.id
+                    for scene in self.coordinator.data.scenes
+                    if scene.name == effect and scene.id != SCENE_OFF
+                ),
+                None,
+            )
+            if scene_id is None:
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="unknown_effect",
+                    translation_placeholders={"effect": str(effect)},
+                )
+        kelvin = kwargs.get(ATTR_COLOR_TEMP_KELVIN)
+        if kelvin is not None:
+            kelvin = clamp_kelvin(kelvin)
+        hs_color = kwargs.get(ATTR_HS_COLOR)
+        brightness = kwargs.get(ATTR_BRIGHTNESS)
 
-        if (kelvin := kwargs.get(ATTR_COLOR_TEMP_KELVIN)) is not None:
-            kelvin = min(max(int(kelvin), MIN_KELVIN), MAX_KELVIN)
-            await lamp.set_color_temperature(kelvin)
+        async def _apply() -> None:
+            if scene_id is not None:
+                await lamp.select_scene(scene_id)
+            elif not lamp.is_on:
+                await lamp.switch_on()
+            if kelvin is not None:
+                await lamp.set_color_temperature(kelvin)
+            if hs_color is not None:
+                # HS sets the uplight color at full uplight brightness; the
+                # overall level is controlled by brightness below.
+                await lamp.set_immediate_light(
+                    uplight=Uplight(
+                        hue=hs_color[0],
+                        saturation=saturation_to_byte(hs_color[1]),
+                        brightness=255,
+                    )
+                )
+            if brightness is not None:
+                await lamp.set_brightness(brightness_to_percent(brightness))
+
+        await self._async_lamp_call(_apply())
+
+        if kelvin is not None:
             self._attr_color_mode = ColorMode.COLOR_TEMP
             self._attr_color_temp_kelvin = kelvin
-
-        if (hs_color := kwargs.get(ATTR_HS_COLOR)) is not None:
-            hue, saturation = hs_color
-            brightness = kwargs.get(ATTR_BRIGHTNESS, self._attr_brightness)
-            brightness_pct = (
-                round(brightness / 255 * 100) if brightness is not None else 100
-            )
-            await lamp.set_hue(round(hue), round(saturation), brightness_pct)
+        if hs_color is not None:
             self._attr_color_mode = ColorMode.HS
-            self._attr_hs_color = (hue, saturation)
-            self._attr_brightness = kwargs.get(ATTR_BRIGHTNESS, brightness)
-        elif (brightness := kwargs.get(ATTR_BRIGHTNESS)) is not None:
-            await lamp.set_brightness(round(brightness / 255 * 100))
+            self._attr_hs_color = hs_color
+        if brightness is not None:
             self._attr_brightness = brightness
-
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the lamp off."""
-        await self.coordinator.lamp.switch_off()
-        self.async_write_ha_state()
+        await self._async_lamp_call(self.coordinator.lamp.switch_off())
 
 
-class LukeRobertsUplight(LukeRobertsBaseLight):
-    """The indirect uplight, with its own brightness and HS color.
+class LukeRobertsTransientLight(LukeRobertsEntity, LightEntity):
+    """Base for the Immediate Light sub-packets.
 
-    Drives the uplight sub-packet of the Immediate Light command. Changes are
-    transient: the lamp reverts them on scene change or power-down, and
-    nothing is readable back, so all state is assumed.
+    Changes are transient: the lamp reverts them on scene change or
+    power-down and cannot report them back, so state is assumed and reset to
+    unknown when the scene changes.
     """
 
-    _attr_translation_key = "uplight"
-    _attr_supported_color_modes = {ColorMode.HS}
-    _attr_color_mode = ColorMode.HS
     _attr_assumed_state = True
 
-    def __init__(self, coordinator: LukeRobertsCoordinator) -> None:
-        super().__init__(coordinator)
-        self._attr_unique_id = f"{self._mac}-uplight"
-        self._attr_is_on = False
+    def __init__(self, coordinator: LukeRobertsCoordinator, key: str) -> None:
+        super().__init__(coordinator, key)
+        self._attr_translation_key = key
+        self._attr_is_on = False if not coordinator.data.is_on else None
         self._attr_brightness = 255
+
+    @callback
+    def _handle_scene_change(self) -> None:
+        self._attr_is_on = False if not self.coordinator.data.is_on else None
+
+
+class LukeRobertsUplight(LukeRobertsTransientLight):
+    """The indirect uplight, with its own brightness and HS color."""
+
+    _attr_supported_color_modes = {ColorMode.HS}
+    _attr_color_mode = ColorMode.HS
+
+    def __init__(self, coordinator: LukeRobertsCoordinator) -> None:
+        super().__init__(coordinator, "uplight")
         self._attr_hs_color = DEFAULT_UPLIGHT_HS
+
+    def _packet(self, hs_color: tuple[float, float], brightness: int) -> Uplight:
+        return Uplight(
+            hue=hs_color[0],
+            saturation=saturation_to_byte(hs_color[1]),
+            brightness=brightness,
+        )
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Set the uplight color and brightness."""
-        hue, saturation = kwargs.get(ATTR_HS_COLOR, self._attr_hs_color)
+        hs_color = kwargs.get(ATTR_HS_COLOR, self._attr_hs_color)
         brightness = kwargs.get(ATTR_BRIGHTNESS, self._attr_brightness) or 255
-        await self.coordinator.lamp.set_hue(
-            round(hue), round(saturation), round(brightness / 255 * 100)
+        await self._async_lamp_call(
+            self.coordinator.lamp.set_immediate_light(
+                uplight=self._packet(hs_color, brightness)
+            )
         )
         self._attr_is_on = True
-        self._attr_hs_color = (hue, saturation)
+        self._attr_hs_color = hs_color
         self._attr_brightness = brightness
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the uplight off by setting its brightness to zero."""
-        hue, saturation = self._attr_hs_color
-        await self.coordinator.lamp.set_hue(round(hue), round(saturation), 0)
+        assert self._attr_hs_color is not None
+        await self._async_lamp_call(
+            self.coordinator.lamp.set_immediate_light(
+                uplight=self._packet(self._attr_hs_color, 0)
+            )
+        )
         self._attr_is_on = False
         self.async_write_ha_state()
 
 
-class LukeRobertsDownlight(LukeRobertsBaseLight):
-    """The direct downlight, with its own brightness and color temperature.
+class LukeRobertsDownlight(LukeRobertsTransientLight):
+    """The direct downlight, with its own brightness and color temperature."""
 
-    Drives the downlight sub-packet of the Immediate Light command. Changes
-    are transient: the lamp reverts them on scene change or power-down, and
-    nothing is readable back, so all state is assumed.
-    """
-
-    _attr_translation_key = "downlight"
     _attr_supported_color_modes = {ColorMode.COLOR_TEMP}
     _attr_color_mode = ColorMode.COLOR_TEMP
     _attr_min_color_temp_kelvin = MIN_KELVIN
     _attr_max_color_temp_kelvin = MAX_KELVIN
-    _attr_assumed_state = True
 
     def __init__(self, coordinator: LukeRobertsCoordinator) -> None:
-        super().__init__(coordinator)
-        self._attr_unique_id = f"{self._mac}-downlight"
-        self._attr_is_on = False
-        self._attr_brightness = 255
+        super().__init__(coordinator, "downlight")
         self._attr_color_temp_kelvin = DEFAULT_DOWNLIGHT_KELVIN
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Set the downlight color temperature and brightness."""
-        kelvin = kwargs.get(ATTR_COLOR_TEMP_KELVIN, self._attr_color_temp_kelvin)
-        kelvin = min(max(int(kelvin), MIN_KELVIN), MAX_KELVIN)
+        kelvin = clamp_kelvin(
+            kwargs.get(ATTR_COLOR_TEMP_KELVIN, self._attr_color_temp_kelvin)
+        )
         brightness = kwargs.get(ATTR_BRIGHTNESS, self._attr_brightness) or 255
-        await self.coordinator.lamp.set_downlight(
-            kelvin, round(brightness / 255 * 100)
+        await self._async_lamp_call(
+            self.coordinator.lamp.set_immediate_light(
+                downlight=Downlight(kelvin=kelvin, brightness=brightness)
+            )
         )
         self._attr_is_on = True
         self._attr_color_temp_kelvin = kelvin
@@ -228,6 +263,11 @@ class LukeRobertsDownlight(LukeRobertsBaseLight):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the downlight off by setting its brightness to zero."""
-        await self.coordinator.lamp.set_downlight(self._attr_color_temp_kelvin, 0)
+        assert self._attr_color_temp_kelvin is not None
+        await self._async_lamp_call(
+            self.coordinator.lamp.set_immediate_light(
+                downlight=Downlight(kelvin=self._attr_color_temp_kelvin, brightness=0)
+            )
+        )
         self._attr_is_on = False
         self.async_write_ha_state()

@@ -15,6 +15,7 @@ A Home Assistant custom integration for [Luke Roberts](https://www.luke-roberts.
   - Color temperature (2700–4000 K, drives the downlight)
   - Color (hue/saturation, drives the uplight)
   - The lamp's built-in scenes as light *effects*
+- **A "Scene" select entity** listing all scenes of the lamp, including *Off*
 - **Separate "Uplight" and "Downlight" entities** on the same device, each with
   its own independent brightness — the uplight with HS color, the downlight
   with color temperature. These use the lamp's *Immediate Light* command, so
@@ -67,8 +68,10 @@ automation:
   connection at a time. Close the Luke Roberts phone app (or move it to the
   background) — it holds connections to all lamps in range while open.
 - **Commands rejected:** if a Bluetooth *security code* is set in the Luke
-  Roberts app, the lamp rejects all API commands. Remove the code to use this
-  integration.
+  Roberts app, the lamp rejects all API commands. Setup detects this and
+  shows an error. Remove the code to use this integration.
+- **New scenes missing:** the scene list is re-read every 30 minutes; reload
+  the integration to pick up changes immediately.
 - **Uplight/Downlight show wrong state:** their changes are transient by
   design; the lamp reverts them on scene change or power-cycle without any way
   to report that back. The main light entity always reflects the polled scene
@@ -86,4 +89,13 @@ by the `pylukeroberts` library. Attach that file to a
 
 - On/off is scene-based: turning the lamp on selects the lamp's default scene, turning it off selects the "Off" scene.
 - Brightness and color changes modify the currently active scene and are not persisted by the lamp across power cycles (this mirrors the lamp's BLE API).
-- The lamp does not report brightness/color back, so those attributes are optimistic; the active scene and on/off state are polled from the lamp.
+- The lamp does not report brightness/color back, so those attributes are optimistic and are cleared when the scene changes; the active scene and on/off state are polled from the lamp every 60 s. The connection is released right after each poll so the Luke Roberts app can still reach the lamp.
+- Requires Home Assistant 2026.4 or newer.
+
+## Development
+
+```bash
+python3.14 -m venv venv && . venv/bin/activate
+pip install -r requirements_test.txt
+pytest
+```

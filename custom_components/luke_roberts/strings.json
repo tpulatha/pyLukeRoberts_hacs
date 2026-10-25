@@ -12,6 +12,10 @@
         "description": "Do you want to set up {name}?"
       }
     },
+    "error": {
+      "cannot_connect": "Failed to connect to the lamp. Close the Luke Roberts app and make sure the lamp is in Bluetooth range.",
+      "security_code": "The lamp has a Bluetooth security code set. Remove it in the Luke Roberts app and try again."
+    },
     "abort": {
       "already_configured": "This lamp is already configured.",
       "already_in_progress": "Configuration is already in progress for this lamp.",
@@ -26,6 +30,28 @@
       "downlight": {
         "name": "Downlight"
       }
+    },
+    "select": {
+      "scene": {
+        "name": "Scene"
+      }
+    }
+  },
+  "exceptions": {
+    "device_not_found": {
+      "message": "Luke Roberts lamp {address} was not found by any Bluetooth adapter or proxy."
+    },
+    "security_code": {
+      "message": "The lamp rejected the command because a Bluetooth security code is set. Remove it in the Luke Roberts app."
+    },
+    "update_failed": {
+      "message": "Unable to read the lamp state: {error}"
+    },
+    "command_failed": {
+      "message": "Sending the command to the lamp failed: {error}"
+    },
+    "unknown_effect": {
+      "message": "The lamp has no scene named \"{effect}\"."
     }
   }
 }
